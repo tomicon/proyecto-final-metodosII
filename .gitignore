@@ -1,0 +1,30 @@
+# --- Ejecutables (Windows) ---
+*.exe
+*.dll
+*.lib
+*.so
+*.dylib
+
+# --- Archivos Objeto e Intermedios ---
+*.o
+*.obj
+*.a
+*.out
+
+# --- Carpetas de Build (Recomendado) ---
+# Si compilas en carpetas específicas, ignóralas completas:
+bin/
+build/
+obj/
+Debug/
+Release/
+
+# --- Archivos de depuración y sistema ---
+*.dSYM/
+.DS_Store
+Thumbs.db
+
+# --- Editores e IDEs (Opcional pero recomendado) ---
+.vscode/
+.idea/
+*.swp
