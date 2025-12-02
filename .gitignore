@@ -11,6 +11,9 @@
 *.a
 *.out
 
+# --- Archivos csv ---
+*.csv
+
 # --- Carpetas de Build (Recomendado) ---
 # Si compilas en carpetas específicas, ignóralas completas:
 bin/
