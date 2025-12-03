@@ -8,7 +8,7 @@
 #define X_MAX 1.5
 #define Y_MIN -1.5
 #define Y_MAX 1.5
-#define MAX_ITER 50
+#define MAX_ITER 35
 #define TOL 1e-6
 #define TOL_SQUARED (TOL * TOL)
 
