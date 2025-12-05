@@ -2,6 +2,7 @@
 #include <math.h>
 #include <complex.h>
 #include "modelo.h"
+#include "calculo_raices.h"
 
 #define WIDTH 800
 #define HEIGHT 800
@@ -16,12 +17,11 @@
 int newton_rawson(double complex z, const double complex roots[3], int *iterations); //devuelve el índice de la raíz convergida
 
 int main() {
-    // Definir las 3 raíces
-    const double complex roots[3] = {
-        1.0 + 0.0 * I,
-        -0.5 + (sqrt(3.0) / 2.0) * I,
-        -0.5 - (sqrt(3.0) / 2.0) * I
-    };
+    double complex z_min = X_MIN + Y_MIN * I;
+    double complex z_max = X_MAX + Y_MAX * I;
+    RootStore store = {.count = 0};
+
+    encontrar_todas_las_raices(z_min, z_max, &store); 
 
     // Abrir archivo CSV en modo texto ("w")
     FILE *fp = fopen("fractal_data.csv", "w");
@@ -46,7 +46,7 @@ int main() {
             int root_idx;
 
             // Método de Newton
-            root_idx = newton_rawson(z, roots, &iterations);
+            root_idx = newton_rawson(z, store.roots , &iterations);
             // Escribir datos en el archivo CSV
             fprintf(fp, "%d,%d\n", root_idx, iterations);
         }
