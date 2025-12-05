@@ -6,10 +6,7 @@
 
 #define WIDTH 800
 #define HEIGHT 800
-#define X_MIN -1.5
-#define X_MAX 1.5
-#define Y_MIN -1.5
-#define Y_MAX 1.5
+#define LIMIT 1.5
 #define MAX_ITER 35
 #define TOL 1e-6
 #define TOL_SQUARED (TOL * TOL)
@@ -17,8 +14,8 @@
 int newton_rawson(double complex z, const double complex roots[3], int *iterations); //devuelve el índice de la raíz convergida
 
 int main() {
-    double complex z_min = X_MIN + Y_MIN * I;
-    double complex z_max = X_MAX + Y_MAX * I;
+    double complex z_min = -LIMIT - LIMIT * I;
+    double complex z_max = LIMIT + LIMIT * I;
     RootStore store = {.count = 0};
 
     encontrar_todas_las_raices(z_min, z_max, &store); 
@@ -33,13 +30,15 @@ int main() {
     // Escribir cabecera (Header)
     fprintf(fp, "root_idx,iterations\n");
 
+    double largo_total = 2.0 * LIMIT;
+
     // Recorremos la imagen
     for (int y = 0; y < HEIGHT; y++) {
         for (int x = 0; x < WIDTH; x++) {
             
             // Mapeo al plano complejo
-            double re = X_MIN + (double)x / (WIDTH - 1) * (X_MAX - X_MIN);
-            double im = Y_MIN + (double)y / (HEIGHT - 1) * (Y_MAX - Y_MIN);
+            double re = -LIMIT + (double)x / (WIDTH - 1) * largo_total;
+            double im = -LIMIT + (double)y / (HEIGHT - 1) * largo_total;
             double complex z = re + im * I;
 
             int iterations = 0;
@@ -73,5 +72,6 @@ int newton_rawson(double complex z, const double complex roots[3], int *iteratio
             }
         }
     }
+    return -1; // Retorna -1 si no convergió después de MAX_ITER
 }
 
