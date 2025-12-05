@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <complex.h>
+#include "modelo.h"
 
 #define WIDTH 800
 #define HEIGHT 800
@@ -11,14 +12,6 @@
 #define MAX_ITER 35
 #define TOL 1e-6
 #define TOL_SQUARED (TOL * TOL)
-
-// Funciones del fractal z^3 - 1
-double complex f(double complex z) {
-    return z * z * z - 1.0;
-}
-double complex df(double complex z) {
-    return 3.0 * z * z;
-}
 
 int newton_rawson(double complex z, const double complex roots[3], int *iterations); //devuelve el índice de la raíz convergida
 
