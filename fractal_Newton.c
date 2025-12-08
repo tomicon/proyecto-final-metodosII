@@ -11,7 +11,7 @@
 #define TOL 1e-6
 #define TOL_SQUARED (TOL * TOL)
 
-int newton_rawson(double complex z, const double complex roots[3], int *iterations); //devuelve el índice de la raíz convergida
+int newton_raphson(double complex z, const double complex roots[3], int *iterations); //devuelve el índice de la raíz convergida
 
 int main() {
     double complex z_min = -LIMIT - LIMIT * I;
@@ -45,7 +45,7 @@ int main() {
             int root_idx;
 
             // Método de Newton
-            root_idx = newton_rawson(z, store.roots , &iterations);
+            root_idx = newton_raphson(z, store.roots , &iterations);
             // Escribir datos en el archivo CSV
             fprintf(fp, "%d,%d\n", root_idx, iterations);
         }
@@ -56,7 +56,7 @@ int main() {
     return 0;
 }
 
-int newton_rawson(double complex z, const double complex roots[3], int *iterations) {
+int newton_raphson(double complex z, const double complex roots[3], int *iterations) {
     for (int k = 0; k < MAX_ITER; k++) {
         double complex deriv = df(z);
         if (cabs(deriv) < 1e-14) return -1;

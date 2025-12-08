@@ -13,31 +13,33 @@
 #define TOL 1e-6
 #define TOL_SQUARED (TOL * TOL)
 
-int newton_rawson(double complex z, const double complex roots[3], int *iterations);
+int newton_raphson(double complex z, const double complex roots[], int roots_count, int *iterations);
 
 int main(int argc, char *argv[]) {
     int rank, size;
-    double start_time, end_time;
+    double tiempo_de_inicio, tiempo_final, computation_end_time;
     
     // Inicializar MPI
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);  // ID del proceso
     MPI_Comm_size(MPI_COMM_WORLD, &size);  // Número total de procesos
     
-    start_time = MPI_Wtime();  // Tiempo inicial
+    tiempo_de_inicio = MPI_Wtime();  //Tiempo inicial
     
+    //*** Busqueda de raices ***
+    //Definimos los limites del area del plano complejo
     double complex z_min = -LIMIT - LIMIT * I;
     double complex z_max = LIMIT + LIMIT * I;
-    RootStore store = {.count = 0};
+    RootStore store = {.count = 0};//Inicializacion de la estructura para almacenar raices
 
-    // Solo el proceso maestro busca las raíces
+    //Solo el proceso 0 realiza la busqueda de raices, luego las comparte a los demas procesos
     if (rank == 0) {
         printf("Buscando raíces...\n");
         encontrar_todas_las_raices(z_min, z_max, &store);
         printf("Raices encontradas: %d\n", store.count);
     }
     
-    //Como el proceso maestro solo calculo el numero de raices, este lo comparte con los demas procesos
+    //Se comparte las raices encontradas por 0 con los demas procesos
     MPI_Bcast(&store.count, 1, MPI_INT, 0, MPI_COMM_WORLD);
     
     //MPI NO puede enviar un numero complejo directamente, por lo que separamos las partes real e imaginaria
@@ -54,18 +56,18 @@ int main(int argc, char *argv[]) {
     MPI_Bcast(raices_parte_real, store.count, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     MPI_Bcast(raices_parte_imaginaria, store.count, MPI_DOUBLE, 0, MPI_COMM_WORLD);
     
-    //Reconstruir las raíces complejas en procesos no-maestros
+    //Reconstruir las raíces complejas en procesos que no son el 0
     if (rank != 0) {
         for (int i = 0; i < store.count; i++) {
             store.roots[i] = raices_parte_real[i] + raices_parte_imaginaria[i] * I;
         }
     }
 
-    double largo_total = 2.0 * LIMIT;
-    int total_pixels = WIDTH * HEIGHT;
+    double largo_total = 2.0 * LIMIT; //Largo total del area en el plano complejo
+    int total_pixels = WIDTH * HEIGHT; //Cantidada total de pixeles a procesar
     
-    // *** DISTRIBUCIÓN DEL TRABAJO ***
-    // Cada proceso calculará una porción de filas
+    // *** DISTRIBUCION DEL TRABAJO ***
+    // Cada proceso calculara una porcion de filas
     int filas_por_procesos = HEIGHT / size;
     int filas_sobrantes = HEIGHT % size;
     
@@ -78,12 +80,13 @@ int main(int argc, char *argv[]) {
         indice_fin = indice_inicio + filas_por_procesos;
     }
     
-    int local_pixels = (indice_fin - indice_inicio) * WIDTH;
+    // Cantidad de pixeles locales a procesar por cada proceso
+    int cant_pixeles_locales = (indice_fin - indice_inicio) * WIDTH;
     
-    
-    // Arrays locales para cada proceso
-    int *convergencia_raices_locales = (int *)malloc(local_pixels * sizeof(int));
-    int *cant_iteraciones_locales = (int *)malloc(local_pixels * sizeof(int));
+    // *** CALCULO PARALELO ***
+    //Cada proceso reserva memoria segun la cantidad de pixeles que procesa
+    int *convergencia_raices_locales = (int *)malloc(cant_pixeles_locales * sizeof(int));
+    int *cant_iteraciones_locales = (int *)malloc(cant_pixeles_locales * sizeof(int));
     
     if (!convergencia_raices_locales || !cant_iteraciones_locales) {
         fprintf(stderr, "Proceso %d: Error al asignar memoria.\n", rank);
@@ -102,8 +105,8 @@ int main(int argc, char *argv[]) {
             int iterations = 0;
             int root_idx;
 
-            // Método de Newton
-            root_idx = newton_rawson(z, store.roots, &iterations);
+            // Metodo de Newton
+            root_idx = newton_raphson(z, store.roots, &iterations);
             
             convergencia_raices_locales[local_idx] = root_idx;
             cant_iteraciones_locales[local_idx] = iterations;
@@ -111,77 +114,104 @@ int main(int argc, char *argv[]) {
         }
     }
     
-    // *** RECOLECCION DE RESULTADOS EN EL PROCESO MAESTRO ***
-    int *todas_convergencia_raices = NULL;
-    int *final_cant_iteraciones = NULL;
-    int *recvcounts = NULL;
-    int *displs = NULL;
-    
+    computation_end_time = MPI_Wtime();  // Tiempo despues del calculo
+
+    // ESCRITURA PARALELA DEL ARCHIVO (cada proceso escribe su parte)    
+    //Preparar los datos a escribir en un buffer local
+    char *buffer = (char *)malloc(cant_pixeles_locales * 30 * sizeof(char)); // 30 caractere maximos por línea 
+    if (!buffer) {
+        fprintf(stderr, "Proceso %d: Error al asignar buffer\n", rank);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+
+    int buffer_pos = 0; //almacena la posicion actual en el buffer. contiene el tamaño total de datos escritos en el buffer
+    for (int i = 0; i < cant_pixeles_locales; i++) {
+        //Formateo CSV: "root_idx,iterations\n"
+        /*Formato: sprintf(buffer + buffer_pos: indica en que parte del archivo escribir , 
+                            "%d,%d\n": raizDeConvergencia,numeroDeIteracion,saltoDeLinea,
+                            arreglo donde obtiene las raices,
+                            arrelgo donde obtine las iteraciones)*/
+        buffer_pos += sprintf(buffer + buffer_pos, "%d,%d\n", 
+                             convergencia_raices_locales[i], 
+                             cant_iteraciones_locales[i]);
+    }
+
+    // Calcular offsets exactos mediante comunicación colectiva
+    int mi_tamaño = buffer_pos;
+    int *tamaños_todos = NULL;
+    //El proceso 0 reserva memoria para almacenar los tamaños de escritura de todos los procesos
     if (rank == 0) {
-        todas_convergencia_raices = (int *)malloc(total_pixels * sizeof(int));
-        final_cant_iteraciones = (int *)malloc(total_pixels * sizeof(int));
-        recvcounts = (int *)malloc(size * sizeof(int));
-        displs = (int *)malloc(size * sizeof(int));
-        
-        // Calcular cuántos datos recibirá de cada proceso
-        int offset = 0;
-        for (int i = 0; i < size; i++) {
-            int proc_start_row, proc_end_row;
-            if (i < filas_sobrantes) {
-                proc_start_row = i * (filas_por_procesos + 1);
-                proc_end_row = proc_start_row + filas_por_procesos + 1;
-            } else {
-                proc_start_row = i * filas_por_procesos + filas_sobrantes;
-                proc_end_row = proc_start_row + filas_por_procesos;
-            }
-            recvcounts[i] = (proc_end_row - proc_start_row) * WIDTH;
-            displs[i] = offset;
-            offset += recvcounts[i];
-        }
+        tamaños_todos = (int *)malloc(size * sizeof(int));
     }
     
-    // Gather de los resultados
-    MPI_Gatherv(convergencia_raices_locales, local_pixels, MPI_INT,
-                todas_convergencia_raices, recvcounts, displs, MPI_INT,
-                0, MPI_COMM_WORLD);
+    //Si no es proceso 0 manda su tamaño de escritura al proceso 0
+    MPI_Gather(&mi_tamaño, 1, MPI_INT, tamaños_todos, 1, MPI_INT, 0, MPI_COMM_WORLD);
     
-    MPI_Gatherv(cant_iteraciones_locales, local_pixels, MPI_INT,
-                final_cant_iteraciones, recvcounts, displs, MPI_INT,
-                0, MPI_COMM_WORLD);
-    
-    // ============================================================
-    // ESCRITURA DEL ARCHIVO (solo proceso maestro)
-    // ============================================================
+    // Calcular offsets acumulados (usando MPI_Offset para archivos grandes), donde empieza a escribir cada proceso
+    MPI_Offset *offsets = NULL;
     if (rank == 0) {
-        printf("Proceso maestro escribiendo resultados al archivo...\n");
-        
-        FILE *fp = fopen("fractal_data.csv", "w");
-        if (!fp) {
-            fprintf(stderr, "Error al crear el archivo CSV.\n");
-            MPI_Abort(MPI_COMM_WORLD, 1);
+        offsets = (MPI_Offset *)malloc(size * sizeof(MPI_Offset));
+        offsets[0] = 20; //Cabecera del archivo ocupa 20 bytes
+        for (int i = 1; i < size; i++) {
+            offsets[i] = offsets[i-1] + (MPI_Offset)tamaños_todos[i-1]; //aqui se almacena la posicion de escritura de cada proceso
         }
+    } else {
+        offsets = (MPI_Offset *)malloc(1 * sizeof(MPI_Offset));
+    }
+    
+    // Distribuir el offset a cada proceso
+    MPI_Offset mi_offset;
+    MPI_Scatter(offsets, 1, MPI_LONG_LONG, &mi_offset, 1, MPI_LONG_LONG, 0, MPI_COMM_WORLD); //se indica a cada proceso donde debe escribir en el archivo
+    
+    //Abrir archivo con MPI-IO (todos los procesos)
+    MPI_File fh;
+    MPI_Status status;
+    
+    //todos los procesos abren el archivo en modo escritura y creacion
+    int result = MPI_File_open(MPI_COMM_WORLD, "fractal_data.csv",
+                               MPI_MODE_WRONLY | MPI_MODE_CREATE,
+                               MPI_INFO_NULL, &fh);
+    
+    if (result != MPI_SUCCESS) {
+        fprintf(stderr, "Proceso %d: Error al abrir archivo con MPI_File_open\n", rank);
+        MPI_Abort(MPI_COMM_WORLD, 1);
+    }
+    
+    //Escribir cabecera (solo rank 0) y datos (todos)
+    if (rank == 0) {
+        char header[] = "root_idx,iterations\n";
+        MPI_File_write_at(fh, 0, header, 20, MPI_CHAR, &status);
+    }
+    
+    //Los procesos escriben sus datos en la posicion correspondiente
+    MPI_File_write_at(fh, mi_offset, buffer, buffer_pos, MPI_CHAR, &status);
+    
+    // Cerrar archivo
+    MPI_File_close(&fh);
+
+    // Liberar memoria
+    free(buffer);
+    if (rank == 0) {
+        free(tamaños_todos);
+    }
+    free(offsets);
+    
+    if (rank == 0) {
+        tiempo_final = MPI_Wtime();
+        double total_time = tiempo_final - tiempo_de_inicio;
+        double computation_time = computation_end_time - tiempo_de_inicio;
+        double io_time = tiempo_final - computation_end_time;
         
-        fprintf(fp, "root_idx,iterations\n");
-        
-        for (int i = 0; i < total_pixels; i++) {
-            fprintf(fp, "%d,%d\n", todas_convergencia_raices[i], final_cant_iteraciones[i]);
-        }
-        
-        fclose(fp);
-        
-        free(todas_convergencia_raices);
-        free(final_cant_iteraciones);
-        free(recvcounts);
-        free(displs);
-        
-        end_time = MPI_Wtime();
-        
-        printf("\n=== PROCESO COMPLETADO ===\n");
+        printf("\n=== PROCESO COMPLETADO (ESCRITURA PARALELA MPI-IO) ===\n");
         printf("Archivo 'fractal_data.csv' creado.\n");
-        printf("Tiempo de ejecucion: %.2f segundos\n", end_time - start_time);
-        printf("Pixeles procesados: %d\n", total_pixels);
+        printf("Tiempo TOTAL: %.2f segundos\n", total_time);
+        printf("  - Tiempo de CALCULO: %.2f segundos (%.1f%%)\n", 
+               computation_time, 100.0 * computation_time / total_time);
+        printf("  - Tiempo de E/S: %.2f segundos (%.1f%%)\n", 
+               io_time, 100.0 * io_time / total_time);
+        printf("Pixeles procesados: %d\n", total_pixeles);
         printf("Procesos MPI: %d\n", size);
-        printf("Velocidad: %.0f pixeles/segundo\n", total_pixels / (end_time - start_time));
+        printf("Velocidad: %.0f pixeles/segundo\n", total_pixeles / total_time);
     }
     
     // Liberar memoria local
@@ -192,7 +222,7 @@ int main(int argc, char *argv[]) {
     return 0;
 }
 
-int newton_rawson(double complex z, const double complex roots[3], int *iterations) {
+int newton_raphson(double complex z, const double complex roots[], int roots_count, int *iterations) {
     for (int k = 0; k < MAX_ITER; k++) {
         double complex deriv = df(z);
         if (cabs(deriv) < 1e-14) return -1;
@@ -200,8 +230,7 @@ int newton_rawson(double complex z, const double complex roots[3], int *iteratio
         z = z - f(z) / deriv;
         *iterations += 1;
 
-        int converged = 0;
-        for (int r = 0; r < 3; r++) {
+        for (int r = 0; r < roots_count; r++) {
             double complex diff = z - roots[r];
             if (creal(diff)*creal(diff) + cimag(diff)*cimag(diff) < TOL_SQUARED) {
                 return r;
