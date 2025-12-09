@@ -7,7 +7,7 @@
 #define WIDTH 800
 #define HEIGHT 800
 #define LIMIT 1.5
-#define MAX_ITER 35
+#define MAX_ITER 100
 #define TOL 1e-6
 #define TOL_SQUARED (TOL * TOL)
 
@@ -52,8 +52,8 @@ int main() {
     }
 
     fclose(fp);
-    printf("Proceso completado. Archivo 'fractal_data.csv' creado.\n");
-    printf("Raíces encontradas: %d\n", store.count);
+    printf("Se creo el archivo 'fractal_data.csv'.\n");
+    printf("Raices encontradas: %d\n", store.count);
     return 0;
 }
 
