@@ -11,7 +11,7 @@
 #define TOL 1e-6
 #define TOL_SQUARED (TOL * TOL)
 
-int newton_raphson(double complex z, const double complex roots[3], int *iterations); //devuelve el índice de la raíz convergida
+int newton_raphson(double complex z, const double complex roots[], int roots_count, int *iterations); //devuelve el índice de la raíz convergida
 
 int main() {
     double complex z_min = -LIMIT - LIMIT * I;
@@ -45,7 +45,7 @@ int main() {
             int root_idx;
 
             // Método de Newton
-            root_idx = newton_raphson(z, store.roots , &iterations);
+            root_idx = newton_raphson(z, store.roots, store.count, &iterations);
             // Escribir datos en el archivo CSV
             fprintf(fp, "%d,%d\n", root_idx, iterations);
         }
@@ -53,10 +53,11 @@ int main() {
 
     fclose(fp);
     printf("Proceso completado. Archivo 'fractal_data.csv' creado.\n");
+    printf("Raíces encontradas: %d\n", store.count);
     return 0;
 }
 
-int newton_raphson(double complex z, const double complex roots[3], int *iterations) {
+int newton_raphson(double complex z, const double complex roots[], int roots_count, int *iterations) {
     for (int k = 0; k < MAX_ITER; k++) {
         double complex deriv = df(z);
         if (cabs(deriv) < 1e-14) return -1;
@@ -65,7 +66,7 @@ int newton_raphson(double complex z, const double complex roots[3], int *iterati
         *iterations += 1;
 
         int converged = 0;
-        for (int r = 0; r < 3; r++) {
+        for (int r = 0; r < roots_count; r++) {
             double complex diff = z - roots[r];
             if (creal(diff)*creal(diff) + cimag(diff)*cimag(diff) < TOL_SQUARED) {
                 return r;
