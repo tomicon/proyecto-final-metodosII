@@ -14,6 +14,7 @@
 typedef struct {
     double complex roots[MAX_ROOTS];
     int count;
+    int count_teorico;
 } RootStore;
 
 void encontrar_todas_las_raices(double complex z_min, double complex z_max, RootStore *store);

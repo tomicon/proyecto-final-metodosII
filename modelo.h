@@ -7,14 +7,14 @@
 // tgmath.h es CRUCIAL: permite que 'pow', 'sin', etc. funcionen 
 // automáticamente con números complejos (mapea pow -> cpow)
 
-// Función: z**3-1
+// Función: sin(z**2+1)
 double complex f(double complex z) {
-    return pow(z, 3) - 1;
+    return sin(pow(z, 2) + 1);
 }
 
-// Derivada: 3*z**2
+// Derivada: 2*z*cos(z**2 + 1)
 double complex df(double complex z) {
-    return 3*pow(z, 2);
+    return 2*z*cos(pow(z, 2) + 1);
 }
 
 

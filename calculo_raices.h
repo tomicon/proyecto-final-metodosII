@@ -91,6 +91,10 @@ void rastreo_recursivo(double complex z_min, double complex z_max, RootStore *st
     double complex N_complejo = integral / (2.0 * M_PI * I);
     int N = (int)round(creal(N_complejo));   //nos aseguramos de redondear a un número entero
     
+    if (profundidad == 0)
+    {
+        store->count_teorico = N;
+    }
     
     double parte_imaginaria = fabs(cimag(N_complejo));  //Esto nos permite saber si el calculo de la integral tiene sentido
     if (parte_imaginaria > 0.5) {
@@ -125,27 +129,29 @@ void rastreo_recursivo(double complex z_min, double complex z_max, RootStore *st
 void encontrar_todas_las_raices(double complex z_min, double complex z_max, RootStore *store) {
     store->count = 0;
     rastreo_recursivo(z_min, z_max, store, 0);
-    
-    int count_inicial = store->count;
-    int tamanio_cuadricula = 20;
-    double re_min = creal(z_min);
-    double re_max = creal(z_max);
-    double im_min = cimag(z_min);
-    double im_max = cimag(z_max);
-    
-    for (int i = 0; i < tamanio_cuadricula; i++) {
-        for (int j = 0; j < tamanio_cuadricula; j++) {
-            double re = re_min + (re_max - re_min) * i / (tamanio_cuadricula - 1);
-            double im = im_min + (im_max - im_min) * j / (tamanio_cuadricula - 1);
-            double complex prueba = re + im * I;
-            double complex root = newton_refinado(prueba);
-            
-            if (cabs(f(root)) < 1e-6) {
-                agregar_root(root, store);
-            }
-            
-            if (store->count >= MAX_ROOTS) {
-                return;
+    if (store->count < store->count_teorico)
+    {
+        int count_inicial = store->count;
+        int tamanio_cuadricula = 20;
+        double re_min = creal(z_min);
+        double re_max = creal(z_max);
+        double im_min = cimag(z_min);
+        double im_max = cimag(z_max);
+        
+        for (int i = 0; i < tamanio_cuadricula; i++) {
+            for (int j = 0; j < tamanio_cuadricula; j++) {
+                double re = re_min + (re_max - re_min) * i / (tamanio_cuadricula - 1);
+                double im = im_min + (im_max - im_min) * j / (tamanio_cuadricula - 1);
+                double complex prueba = re + im * I;
+                double complex root = newton_refinado(prueba);
+                
+                if (cabs(f(root)) < 1e-6) {
+                    agregar_root(root, store);
+                }
+                
+                if (store->count >= MAX_ROOTS) {
+                    return;
+                }
             }
         }
     }
